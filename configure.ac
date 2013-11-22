@@ -15,6 +15,8 @@ AM_PROG_CC_C_O
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
+AC_CHECK_LIB([srsirc], [ircbas_init], [], [AC_MSG_ERROR([libsrsirc not installed?])])
+
 AC_CONFIG_FILES([Makefile
                  src/Makefile
                  src/netinfo/Makefile])
