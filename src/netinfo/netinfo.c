@@ -38,6 +38,7 @@ static char *s_srvpw = NULL;
 static void process_args(int *argc, char ***argv);
 static void init(int *argc, char ***argv);
 static void usage(FILE *str, const char *a0, int ec);
+static void randstr(char *dst, size_t dst_sz);
 
 
 static void
@@ -172,6 +173,13 @@ main(int argc, char **argv)
 		ircbas_set_server(irc, paddr, peerport);
 		ircbas_set_pass(irc, s_srvpw); //NULL == no password
 		ircbas_set_ssl(irc, ssl);
+		char str[10];
+		randstr(str, sizeof str);
+		ircbas_set_nick(irc, str);
+		randstr(str, sizeof str);
+		ircbas_set_uname(irc, str);
+		randstr(str, sizeof str);
+		ircbas_set_fname(irc, str);
 		ircbas_set_connect_timeout(irc, CONTO_SOFT, CONTO_HARD);
 
 		if (!ircbas_connect(irc))
@@ -283,4 +291,13 @@ conread_cb(char **tok, size_t tok_len, void *tag)
 		puts("");
 	}
 	return true;
+}
+
+static void
+randstr(char *dst, size_t dst_sz)
+{
+	for (size_t i = 0; i < dst_sz; i++)
+		dst[i] = (((rand()>>3)&1) ? 'A' : 'a') + ((rand()>>3)%26);
+	
+	dst[dst_sz-1] = '\0';
 }
