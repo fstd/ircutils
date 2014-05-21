@@ -6,14 +6,14 @@
 #include "common.h"
 
 bool
-iprintf(ibhnd_t irc, const char *fmt, ...)
+iprintf(irc irc, const char *fmt, ...)
 {
 	char buf[1024];
 	va_list l;
 	va_start(l, fmt);
-	int r = vsnprintf(buf, sizeof buf, fmt, l);
+	vsnprintf(buf, sizeof buf, fmt, l);
 	va_end(l);
-	return ircbas_write(irc, buf);
+	return irc_write(irc, buf);
 }
 
 bool

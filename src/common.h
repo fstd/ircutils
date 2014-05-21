@@ -8,11 +8,11 @@
 #include <stdarg.h>
 #include <netdb.h>
 
-#include <libsrsirc/irc_basic.h>
+#include <libsrsirc/irc.h>
 
-#define COUNTOF(ARR) (sizeof (ARR) / sizeof *(ARR))
+#define COUNTOF(ARR) (sizeof (ARR) / sizeof (ARR)[0])
 
-bool iprintf(ibhnd_t irc, const char *fmt, ...);
+bool iprintf(irc irc, const char *fmt, ...);
 bool peeraddr(char *addr, size_t addr_sz, unsigned short *port, struct addrinfo *res);
 
 struct ircsrv {
