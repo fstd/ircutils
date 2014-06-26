@@ -19,8 +19,8 @@
 #include <arpa/inet.h>
 
 #define WITH_SSL
-#include <libsrsirc/irc_basic.h>
-#include <libsrsirc/irc_util.h>
+#include <libsrsirc/irc_ext.h>
+#include <libsrsirc/util.h>
 #undef WITH_SSL
 
 #include "../debug.h"
@@ -117,7 +117,7 @@ usage(FILE *str, const char *a0, int ec)
 }
 
 
-bool conread_cb(char **msg, size_t msg_len, void *tag);
+bool conread_cb(tokarr *msg, void *tag);
 
 
 int
@@ -125,15 +125,15 @@ main(int argc, char **argv)
 {
 	init(&argc, &argv);
 
-	ibhnd_t irc = ircbas_init();
-	ircbas_regcb_conread(irc, conread_cb, NULL);
+	irc irc = irc_init();
+	irc_regcb_conread(irc, conread_cb, NULL);
 
 	char host[256];
 	unsigned short port;
 	char portstr[6];
 	bool ssl = false;
 
-	parse_hostspec(host, sizeof host, &port, &ssl, s_srvhost);
+	ut_parse_hostspec(host, sizeof host, &port, &ssl, s_srvhost);
 	if (!port)
 		port = DEF_PORT;
 	
@@ -142,7 +142,7 @@ main(int argc, char **argv)
 	struct addrinfo hints, *res, *res0;
 	int error;
 	bool success = false;
-	const char *cause = NULL;
+	//const char *cause = NULL;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -170,19 +170,19 @@ main(int argc, char **argv)
 			continue;
 		}
 
-		ircbas_set_server(irc, paddr, peerport);
-		ircbas_set_pass(irc, s_srvpw); //NULL == no password
-		ircbas_set_ssl(irc, ssl);
+		irc_set_server(irc, paddr, peerport);
+		irc_set_pass(irc, s_srvpw); //NULL == no password
+		irc_set_ssl(irc, ssl);
 		char str[10];
 		randstr(str, sizeof str);
-		ircbas_set_nick(irc, str);
+		irc_set_nick(irc, str);
 		randstr(str, sizeof str);
-		ircbas_set_uname(irc, str);
+		irc_set_uname(irc, str);
 		randstr(str, sizeof str);
-		ircbas_set_fname(irc, str);
-		ircbas_set_connect_timeout(irc, CONTO_SOFT, CONTO_HARD);
+		irc_set_fname(irc, str);
+		irc_set_connect_timeout(irc, CONTO_SOFT, CONTO_HARD);
 
-		if (!ircbas_connect(irc))
+		if (!irc_connect(irc))
 			W("couldn't connect/logon to '%s:%hu'", paddr, peerport);
 		else {
 			printf("ACTUALHOST %s:%hu\n", paddr, peerport);
@@ -201,33 +201,33 @@ main(int argc, char **argv)
 	for (;;) {
 		if (ton + ALL_TO < time(NULL)) {
 			W("aborting due to timeout (server doesn't ping?)");
-			printf("PINGDELAY: %d\n", time(NULL) - ton);//least
+			printf("PINGDELAY: %d\n", (int)(time(NULL) - ton));//least
 			break;
 		}
 
-		if (!ircbas_online(irc))
+		if (!irc_online(irc))
 			E("disconnected unexpectedly");
 
-		char *tok[16];
-		int r = ircbas_read(irc, tok, COUNTOF(tok), 5000000);
+		tokarr tok;
+		int r = irc_read(irc, &tok, 5000000);
 
 		if (r < 0)
-			E("ircbas_read failed");
+			E("irc_read failed");
 
 		if (r == 0)
 			continue;
 
 		char line[1024];
-		sndumpmsg(line, sizeof line, 0, tok, COUNTOF(tok));
+		ut_sndumpmsg(line, sizeof line, 0, &tok);
 		D("LO: %s", line);
 
 		if (strcmp(tok[1], "PING") == 0) {
 			iprintf(irc, "PONG :%s\r\n", tok[2]);
-			printf("PINGDELAY: %d\n", time(NULL) - ton);
+			printf("PINGDELAY: %d\n", (int)(time(NULL) - ton));
 			break;
 
 		} else if (strcmp(tok[1], "005") == 0) {
-			int i = 3;
+			size_t i = 3;
 			while(i+1 < COUNTOF(tok) && tok[i+1]) //ignore last
 				printf("005 %s\n", tok[i++]);
 
@@ -240,54 +240,54 @@ main(int argc, char **argv)
 		} else {
 			W("unhandled command: '%s'", tok[1]);
 			fputs("BOGUS", stdout);
-			int i = 1;
+			size_t i = 1;
 			while(i < COUNTOF(tok) && tok[i])
 				printf(" '%s'", tok[i++]);
 			puts("");
 		}
 	}
 
-	ircbas_reset(irc);
+	irc_reset(irc);
 
 	return EXIT_SUCCESS;
 }
 
 bool
-conread_cb(char **tok, size_t tok_len, void *tag)
+conread_cb(tokarr *tok, void *tag)
 {
 	char line[1024];
-	sndumpmsg(line, sizeof line, tag, tok, tok_len);
+	ut_sndumpmsg(line, sizeof line, tag, tok);
 	D("CR: %s", line);
-	if (strcmp(tok[1], "001") == 0) {
-		printf("001 %s\n", tok[3]);
-	} else if (strcmp(tok[1], "002") == 0) {
-		printf("002 %s\n", tok[3]);
-	} else if (strcmp(tok[1], "003") == 0) {
-		printf("003 %s\n", tok[3]);
-	} else if (strcmp(tok[1], "004") == 0) {
-		int i = 3;
-		while(i < tok_len && tok[i])
+	if (strcmp((*tok)[1], "001") == 0) {
+		printf("001 %s\n", (*tok)[3]);
+	} else if (strcmp((*tok)[1], "002") == 0) {
+		printf("002 %s\n", (*tok)[3]);
+	} else if (strcmp((*tok)[1], "003") == 0) {
+		printf("003 %s\n", (*tok)[3]);
+	} else if (strcmp((*tok)[1], "004") == 0) {
+		size_t i = 3;
+		while(i < COUNTOF(*tok) && (*tok)[i])
 			i++;
 
-		printf("004 HOST %s\n", i > 3 ? tok[3] : "(none)");
-		printf("004 VER %s\n", i > 4 ? tok[4] : "(none)");
-		printf("004 UMODES %s\n", i > 5 ? tok[5] : "(none)");
-		printf("004 CMODES %s\n", i > 6 ? tok[6] : "(none)");
+		printf("004 HOST %s\n", i > 3 ? (*tok)[3] : "(none)");
+		printf("004 VER %s\n", i > 4 ? (*tok)[4] : "(none)");
+		printf("004 UMODES %s\n", i > 5 ? (*tok)[5] : "(none)");
+		printf("004 CMODES %s\n", i > 6 ? (*tok)[6] : "(none)");
 
 		if (i > 7) {
 			i = 7;
 			fputs("004 XTOK", stdout);
-			while(i < tok_len && tok[i])
-				printf(" '%s'", tok[i++]);
+			while(i < COUNTOF(*tok) && (*tok)[i])
+				printf(" '%s'", (*tok)[i++]);
 
 			puts("");
 		}
 	} else {
-		W("unhandled command: '%s'", tok[1]);
+		W("unhandled command: '%s'", (*tok)[1]);
 		fputs("BOGUS_CR", stdout);
-		int i = 1;
-		while(i < tok_len && tok[i])
-			printf(" '%s'", tok[i++]);
+		size_t i = 1;
+		while (i < COUNTOF(*tok) && (*tok)[i])
+			printf(" '%s'", (*tok)[i++]);
 		puts("");
 	}
 	return true;
