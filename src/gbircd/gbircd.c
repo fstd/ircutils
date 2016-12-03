@@ -180,7 +180,7 @@ main(int argc, char **argv)
 	init(&argc, &argv);
 	signal(SIGPIPE, SIG_IGN); 
 
-	int sck = addr_bind_socket_p("127.0.0.1", 6667, NULL, NULL, 0, 0);
+	int sck = addr_bind_socket_p("192.168.1.12", 6667, NULL, NULL, 0, 0);
 	if (sck < 0)
 		EE("addr_bind_socket_p");
 

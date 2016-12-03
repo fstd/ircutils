@@ -1,1 +1,1 @@
-SUBDIRS = netinfo gbircd
+SUBDIRS = netinfo gbircd malircd

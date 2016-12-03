@@ -12,12 +12,11 @@
 
 #define COUNTOF(ARR) (sizeof (ARR) / sizeof *(ARR))
 
-bool iprintf(irc irc, const char *fmt, ...);
 bool peeraddr(char *addr, size_t addr_sz, unsigned short *port, struct addrinfo *res);
 
-struct ircsrv {
-	
-
-};
+//struct ircsrv {
+//
+//
+//};
 
 #endif /* IRCUTILS_COMMON_H */

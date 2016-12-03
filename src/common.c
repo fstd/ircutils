@@ -7,17 +7,6 @@
 #include "common.h"
 
 bool
-iprintf(irc irc, const char *fmt, ...)
-{
-	char buf[1024];
-	va_list l;
-	va_start(l, fmt);
-	vsnprintf(buf, sizeof buf, fmt, l);
-	va_end(l);
-	return irc_write(irc, buf);
-}
-
-bool
 peeraddr(char *addr, size_t addr_sz, unsigned short *port, struct addrinfo *res)
 {
 	if (res->ai_family == AF_INET) {

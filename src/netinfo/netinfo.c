@@ -28,12 +28,13 @@
 
 #define CONTO_SOFT 120000000 //unit: us
 #define CONTO_HARD 300000000 //unit: us
-#define ALL_TO 600 //unit: s
+#define ALL_TO 1800 //unit: s
 #define DEF_PORT 6667
 
 static char *s_srvhost = NULL;
 static char *s_srvpw = NULL;
 
+#include "names.inc.c" // defines `nicks`, `unames` and `fnames`
 
 static void process_args(int *argc, char ***argv);
 static void init(int *argc, char ***argv);
@@ -123,17 +124,18 @@ bool conread_cb(tokarr *msg, void *tag);
 int
 main(int argc, char **argv)
 {
+	srand(time(NULL));
 	init(&argc, &argv);
 
-	irc irc = irc_init();
-	irc_regcb_conread(irc, conread_cb, NULL);
+	irc *ictx = irc_init();
+	irc_regcb_conread(ictx, conread_cb, NULL);
 
 	char host[256];
 	unsigned short port;
 	char portstr[6];
 	bool ssl = false;
 
-	ut_parse_hostspec(host, sizeof host, &port, &ssl, s_srvhost);
+	lsi_ut_parse_hostspec(host, sizeof host, &port, &ssl, s_srvhost);
 	if (!port)
 		port = DEF_PORT;
 	
@@ -148,10 +150,12 @@ main(int argc, char **argv)
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	error = getaddrinfo(host, portstr, &hints, &res0);
-	if (error)
-		E("%s", gai_strerror(error));
-
 	printf("GIVENHOST %s:%hu%s\n", host, port, ssl?"/ssl":"");
+	if (error) {
+		printf("CANTRESOLVE\n");
+		E("%s: %s:%s", gai_strerror(error), host, portstr);
+	}
+
 	char paddr[64] = "(non-INET/INET6)";
 	unsigned short peerport = 0;
 	int acount = 0;
@@ -163,6 +167,10 @@ main(int argc, char **argv)
 
 	printf("NUMADDRS %d\n", acount);
 
+	size_t nameid = rand() % COUNTOF(nicks);
+	printf("MYNICK %s\n", nicks[nameid]);
+	printf("MYUNAME %s\n", unames[nameid]);
+	printf("MYFNAME %s\n", fnames[nameid]);
 	for (res = res0; res; res = res->ai_next) {
 
 		if (!peeraddr(paddr, sizeof paddr, &peerport, res)) {
@@ -170,19 +178,15 @@ main(int argc, char **argv)
 			continue;
 		}
 
-		irc_set_server(irc, paddr, peerport);
-		irc_set_pass(irc, s_srvpw); //NULL == no password
-		irc_set_ssl(irc, ssl);
-		char str[10];
-		randstr(str, sizeof str);
-		irc_set_nick(irc, str);
-		randstr(str, sizeof str);
-		irc_set_uname(irc, str);
-		randstr(str, sizeof str);
-		irc_set_fname(irc, str);
-		irc_set_connect_timeout(irc, CONTO_SOFT, CONTO_HARD);
+		irc_set_server(ictx, paddr, peerport);
+		irc_set_pass(ictx, s_srvpw); //NULL == no password
+		irc_set_ssl(ictx, ssl);
+		irc_set_nick(ictx, nicks[nameid]);
+		irc_set_uname(ictx, unames[nameid]);
+		irc_set_fname(ictx, fnames[nameid]);
+		irc_set_connect_timeout(ictx, CONTO_SOFT, CONTO_HARD);
 
-		if (!irc_connect(irc))
+		if (!irc_connect(ictx))
 			W("couldn't connect/logon to '%s:%hu'", paddr, peerport);
 		else {
 			printf("ACTUALHOST %s:%hu\n", paddr, peerport);
@@ -193,37 +197,47 @@ main(int argc, char **argv)
 	}
 	freeaddrinfo(res0);
 
-	if (!success)
+	if (!success) {
+		printf("CONFAIL\n");
 		E("failed to connect/logon to irc, giving up");
+	}
 
+	int failed = 0;
+	int seenmotd = 0;
 
 	time_t ton = time(NULL);
 	for (;;) {
 		if (ton + ALL_TO < time(NULL)) {
 			W("aborting due to timeout (server doesn't ping?)");
-			printf("PINGDELAY: %d\n", (int)(time(NULL) - ton));//least
+			printf("PINGDELAY %d\n", (int)(time(NULL) - ton));//least
 			break;
 		}
 
-		if (!irc_online(irc))
-			E("disconnected unexpectedly");
+		if (!irc_online(ictx)) {
+			failed=1;
+			W("disconnected unexpectedly");
+			break;
+		}
 
 		tokarr tok;
-		int r = irc_read(irc, &tok, 5000000);
+		int r = irc_read(ictx, &tok, 5000000);
 
-		if (r < 0)
-			E("irc_read failed");
+		if (r < 0) {
+			failed=2 + irc_eof(ictx);
+			W("irc_read failed");
+			break;
+		}
 
 		if (r == 0)
 			continue;
 
 		char line[1024];
-		ut_sndumpmsg(line, sizeof line, 0, &tok);
+		lsi_ut_sndumpmsg(line, sizeof line, 0, &tok);
 		D("LO: %s", line);
 
 		if (strcmp(tok[1], "PING") == 0) {
-			iprintf(irc, "PONG :%s\r\n", tok[2]);
-			printf("PINGDELAY: %d\n", (int)(time(NULL) - ton));
+			irc_printf(ictx, "PONG :%s\r\n", tok[2]);
+			printf("PINGDELAY %d\n", (int)(time(NULL) - ton));
 			break;
 
 		} else if (strcmp(tok[1], "005") == 0) {
@@ -233,10 +247,12 @@ main(int argc, char **argv)
 
 		} else if (strcmp(tok[1], "372") == 0) { //MOTD data
 			printf("MOTD %s\n", tok[3]);
-
+			seenmotd = 1;
 		} else if (strcmp(tok[1], "375") == 0) { //MOTD end
+			irc_dump(ictx);
 		} else if (strcmp(tok[1], "376") == 0) { //MOTD start
 		} else if (strcmp(tok[1], "422") == 0) { //MOTD missing
+			irc_dump(ictx);
 		} else {
 			W("unhandled command: '%s'", tok[1]);
 			fputs("BOGUS", stdout);
@@ -247,7 +263,20 @@ main(int argc, char **argv)
 		}
 	}
 
-	irc_reset(irc);
+	if (!failed) {
+		if (!seenmotd)
+			printf("NOMOTD\n");
+		printf("OKAY\n");
+	} else if (failed == 1)
+		printf("FAILED UNEXPECTED_DISCONNECT\n");
+	else if (failed == 2)
+		printf("FAILED IRC_READ_FAILED\n");
+	else
+		printf("FAILED UNEXPECTED_EOF\n");
+
+	irc_dump(ictx);
+
+	irc_reset(ictx);
 
 	return EXIT_SUCCESS;
 }
@@ -256,7 +285,7 @@ bool
 conread_cb(tokarr *tok, void *tag)
 {
 	char line[1024];
-	ut_sndumpmsg(line, sizeof line, tag, tok);
+	lsi_ut_sndumpmsg(line, sizeof line, tag, tok);
 	D("CR: %s", line);
 	if (strcmp((*tok)[1], "001") == 0) {
 		printf("001 %s\n", (*tok)[3]);

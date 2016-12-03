@@ -21,6 +21,7 @@ AC_CHECK_LIB([srsbsns], [ringbuf_init], [], [AC_MSG_ERROR([libsrsbsns not instal
 AC_CONFIG_FILES([Makefile
                  src/Makefile
                  src/gbircd/Makefile
+                 src/malircd/Makefile
                  src/netinfo/Makefile])
 AC_OUTPUT
 
